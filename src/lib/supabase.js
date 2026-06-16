@@ -5,15 +5,11 @@ const supabaseAnonKey  = import.meta.env.VITE_SUPABASE_ANON_KEY
 const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn(
-    '[Supabase] Variaveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY nao encontradas. ' +
-    'Copie .env.example para .env e preencha com os dados do seu projeto.'
-  )
+  console.warn('[Supabase] Variaveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY nao encontradas.')
 }
 
 export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '')
 
-// Cliente admin - usa service role key, bypassa RLS. So para operacoes de admin.
 let supabaseAdmin = null
 try {
   if (supabaseServiceKey) {
@@ -26,14 +22,19 @@ try {
 }
 export { supabaseAdmin }
 
+export async function signIn(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+  if (error) throw error
+  return data
+}
+
+export async function getUserProfile(userId) {
+  const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
+  if (error) throw error
+  return data
+}
+
 export async function getCurrentUser() {
   const { data: { user } } = await supabase.auth.getUser()
   return user
-}
-
-export async function getCurrentProfile() {
-  const user = await getCurrentUser()
-  if (!user) return null
-  const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-  return data
 }
