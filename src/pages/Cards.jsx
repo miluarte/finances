@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, CreditCard } from 'lucide-react'
+import { Plus, CreditCard, Pencil, Trash2, Check } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { formatCurrency } from '@/lib/utils'
@@ -9,18 +9,31 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
-  Drawer, DrawerTrigger, DrawerContent, DrawerHeader,
-  DrawerTitle, DrawerFooter, DrawerClose
-} from '@/components/ui/drawer'
+  Dialog, DialogContent, DialogHeader,
+  DialogTitle, DialogFooter, DialogClose
+} from '@/components/ui/dialog'
+
+const EMPTY_FORM = {
+  name: '', last_four: '', credit_limit: '', network: 'Visa',
+  due_day: '', closing_day: '', allowed_users: []
+}
 
 export default function Cards() {
   const { profile, isAdmin } = useAuth()
   const [cards, setCards] = useState([])
+  const [members, setMembers] = useState([])           // all non-admin users
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ name: '', last_four: '', credit_limit: '', network: 'Visa' })
+  const [editCard, setEditCard] = useState(null)
+  const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(null)
 
-  useEffect(() => { fetchCards() }, [profile])
+  useEffect(() => {
+    fetchCards()
+    window.addEventListener('focus', fetchCards)
+    return () => window.removeEventListener('focus', fetchCards)
+  }, [profile])
+  useEffect(() => { if (isAdmin) fetchMembers() }, [isAdmin])
 
   async function fetchCards() {
     if (!profile) return
@@ -30,10 +43,56 @@ export default function Cards() {
     } else {
       const { data } = await supabase
         .from('card_permissions')
-        .select('credit_cards(*)')
+        .select('credit_cards(*, profiles(full_name))')
         .eq('user_id', profile.id)
       setCards((data ?? []).map(r => r.credit_cards).filter(Boolean))
     }
+  }
+
+  async function fetchMembers() {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .eq('role', 'member')
+    setMembers(data ?? [])
+  }
+
+  async function fetchCardPermissions(cardId) {
+    const { data } = await supabase
+      .from('card_permissions')
+      .select('user_id')
+      .eq('card_id', cardId)
+    return (data ?? []).map(r => r.user_id)
+  }
+
+  function toggleUser(userId) {
+    setForm(f => ({
+      ...f,
+      allowed_users: f.allowed_users.includes(userId)
+        ? f.allowed_users.filter(id => id !== userId)
+        : [...f.allowed_users, userId]
+    }))
+  }
+
+  function openNew() {
+    setEditCard(null)
+    setForm(EMPTY_FORM)
+    setOpen(true)
+  }
+
+  async function openEdit(card) {
+    setEditCard(card)
+    const allowed = await fetchCardPermissions(card.id)
+    setForm({
+      name: card.name ?? '',
+      last_four: card.last_four ?? '',
+      credit_limit: card.credit_limit ?? '',
+      network: card.network ?? 'Visa',
+      due_day: card.due_day ?? '',
+      closing_day: card.closing_day ?? '',
+      allowed_users: allowed,
+    })
+    setOpen(true)
   }
 
   async function handleSave(e) {
@@ -41,18 +100,51 @@ export default function Cards() {
     if (!isAdmin) return
     setSaving(true)
     try {
-      await supabase.from('credit_cards').insert({
-        owner_id: profile.id,
+      const payload = {
         name: form.name,
         last_four: form.last_four,
         credit_limit: parseFloat(form.credit_limit),
         network: form.network,
-      })
+        due_day: form.due_day ? parseInt(form.due_day) : null,
+        closing_day: form.closing_day ? parseInt(form.closing_day) : null,
+      }
+
+      let cardId
+      if (editCard) {
+        await supabase.from('credit_cards').update(payload).eq('id', editCard.id)
+        cardId = editCard.id
+      } else {
+        const { data } = await supabase
+          .from('credit_cards')
+          .insert({ ...payload, owner_id: profile.id })
+          .select('id')
+          .single()
+        cardId = data.id
+      }
+
+      // sync permissions: delete all, re-insert selected
+      await supabase.from('card_permissions').delete().eq('card_id', cardId)
+      if (form.allowed_users.length > 0) {
+        await supabase.from('card_permissions').insert(
+          form.allowed_users.map(uid => ({ card_id: cardId, user_id: uid }))
+        )
+      }
+
       setOpen(false)
-      setForm({ name: '', last_four: '', credit_limit: '', network: 'Visa' })
       fetchCards()
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!isAdmin) return
+    setDeleting(id)
+    try {
+      await supabase.from('credit_cards').delete().eq('id', id)
+      setCards(prev => prev.filter(c => c.id !== id))
+    } finally {
+      setDeleting(null)
     }
   }
 
@@ -61,81 +153,44 @@ export default function Cards() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Cartões</h1>
         {isAdmin && (
-          <Drawer open={open} onOpenChange={setOpen}>
-            <DrawerTrigger asChild>
-              <Button size="sm" className="gap-1.5"><Plus className="h-4 w-4" />Novo cartão</Button>
-            </DrawerTrigger>
-            <DrawerContent>
-              <DrawerHeader>
-                <DrawerTitle>Cadastrar Cartão</DrawerTitle>
-              </DrawerHeader>
-              <form onSubmit={handleSave} className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Nome do cartão</Label>
-                  <Input placeholder="Ex: Nubank Família" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Últimos 4 dígitos</Label>
-                    <Input placeholder="1234" maxLength={4} value={form.last_four} onChange={e => setForm(f => ({ ...f, last_four: e.target.value }))} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Bandeira</Label>
-                    <Input placeholder="Visa / Master" value={form.network} onChange={e => setForm(f => ({ ...f, network: e.target.value }))} />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Limite total (R$)</Label>
-                  <Input type="number" step="0.01" min="0" placeholder="5000,00" value={form.credit_limit} onChange={e => setForm(f => ({ ...f, credit_limit: e.target.value }))} required />
-                </div>
-                <DrawerFooter>
-                  <Button type="submit" disabled={saving}>{saving ? 'Salvando…' : 'Salvar'}</Button>
-                  <DrawerClose asChild><Button variant="outline">Cancelar</Button></DrawerClose>
-                </DrawerFooter>
-              </form>
-            </DrawerContent>
-          </Drawer>
+          <Button size="sm" className="gap-1.5" onClick={openNew}>
+            <Plus className="h-4 w-4" />Novo cartão
+          </Button>
         )}
       </div>
 
-      {cards.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-          <CreditCard className="h-10 w-10 opacity-30" />
-          <p className="text-sm">{isAdmin ? 'Nenhum cartão cadastrado.' : 'Nenhum cartão autorizado para você.'}</p>
-        </div>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {cards.map(card => (
-            <Card key={card.id} className="overflow-hidden">
-              <CardHeader className="pb-2 flex flex-row items-center gap-3 space-y-0">
-                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <CreditCard className="h-5 w-5 text-primary" />
+      {/* Dialog: criar ou editar */}
+      {isAdmin && (
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>{editCard ? 'Editar Cartão' : 'Cadastrar Cartão'}</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSave} className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>Nome do cartão</Label>
+                <Input
+                  placeholder="Ex: Nubank Família"
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Últimos 4 dígitos</Label>
+                  <Input
+                    inputMode="numeric"
+                    placeholder="1234"
+                    maxLength={4}
+                    value={form.last_four}
+                    onChange={e => setForm(f => ({ ...f, last_four: e.target.value.replace(/\D/g, '') }))}
+                  />
                 </div>
-                <div>
-                  <CardTitle className="text-base">{card.name}</CardTitle>
-                  <p className="text-xs text-muted-foreground">{card.network} •••• {card.last_four}</p>
-                </div>
-              </CardHeader>
-              {isAdmin && (
-                <CardContent className="pt-0 space-y-1.5">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Limite total</span>
-                    <span className="font-medium">{formatCurrency(card.credit_limit)}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Fatura atual</span>
-                    <Badge variant="secondary">{formatCurrency(card.current_balance ?? 0)}</Badge>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Disponível estimado</span>
-                    <span className="font-medium text-green-600">{formatCurrency((card.credit_limit ?? 0) - (card.current_balance ?? 0))}</span>
-                  </div>
-                </CardContent>
-              )}
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
+                <div className="space-y-1.5">
+                  <Label>Bandeira</Label>
+                  <Input
+                    placeholder="Visa / Master / Elo"
+                    value={form.network}
+                    onChange={e => setForm(f => ({ 

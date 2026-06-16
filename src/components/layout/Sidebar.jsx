@@ -8,7 +8,7 @@ import {
   Heart,
   CalendarDays,
   LogOut,
-  Settings,
+  Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -22,6 +22,7 @@ const navItems = [
   { to: '/caixinhas',   icon: PiggyBank,        label: 'Caixinhas'        },
   { to: '/desejos',     icon: Heart,            label: 'Lista de Desejos' },
   { to: '/agenda',      icon: CalendarDays,     label: 'Agenda'           },
+  { to: '/usuarios',    icon: Users,            label: 'Usuários', adminOnly: true },
 ]
 
 export function Sidebar() {
@@ -90,10 +91,3 @@ export function Sidebar() {
           title={profile?.full_name ?? 'Usuário'}
           className="h-9 w-9 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0 cursor-default"
           style={{ backgroundColor: 'hsl(var(--primary))' }}
-        >
-          {initials}
-        </div>
-      </div>
-    </aside>
-  )
-}

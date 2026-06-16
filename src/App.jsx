@@ -9,6 +9,7 @@ import Closing from '@/pages/Closing'
 import Savings from '@/pages/Savings'
 import Wishlist from '@/pages/Wishlist'
 import Agenda from '@/pages/Agenda'
+import UsersPage from '@/pages/Users'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -51,10 +52,6 @@ export default function App() {
             <Route path="caixinhas" element={<Savings />} />
             <Route path="desejos" element={<Wishlist />} />
             <Route path="agenda" element={<Agenda />} />
+            <Route path="usuarios" element={<AdminRoute><UsersPage /></AdminRoute>} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AuthProvider>
-    </BrowserRouter>
-  )
-}
+          <Ro

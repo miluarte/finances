@@ -19,6 +19,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchSummary()
+    window.addEventListener('focus', fetchSummary)
+    return () => window.removeEventListener('focus', fetchSummary)
   }, [profile])
 
   async function fetchSummary() {
@@ -26,8 +28,9 @@ export default function Dashboard() {
     setLoading(true)
     try {
       // Busca transações do mês atual do usuário
+      const [y, m] = currentMonth.split('-').map(Number)
       const startDate = `${currentMonth}-01`
-      const endDate = `${currentMonth}-31`
+      const endDate = `${currentMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`
 
       let query = supabase
         .from('transactions')
@@ -141,16 +144,4 @@ export default function Dashboard() {
                       <AlertTriangle className="h-4 w-4" />
                       <AlertTitle className="text-xs font-semibold">Atenção</AlertTitle>
                       <AlertDescription className="text-xs">
-                        Mais de {Math.round(ratio * 100)}% do limite utilizado. Verifique se há compras não lançadas.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
+                        Mais de {Math.round(ratio * 100)}% do limite utilizado. Verifique se há compras não lançad
