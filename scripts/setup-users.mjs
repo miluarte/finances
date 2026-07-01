@@ -54,7 +54,7 @@ async function createUser({ email, password, full_name, role }) {
 }
 
 console.log('═══════════════════════════════════════')
-console.log('  FamilyFinance — Setup de Usuários')
+console.log('  Troco — Setup de Usuários')
 console.log('═══════════════════════════════════════')
 
 for (const u of users) {

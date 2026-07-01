@@ -16,7 +16,7 @@ export function AppLayout() {
             style={{ backgroundColor: 'hsl(var(--primary))' }}>
             <span className="text-white font-bold text-xs">FF</span>
           </div>
-          <span className="font-semibold text-sm">FamilyFinance</span>
+          <span className="font-semibold text-sm">Troco</span>
         </header>
 
         {/* Scrollable page content */}

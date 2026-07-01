@@ -1,5 +1,5 @@
 -- ============================================================
--- FamilyFinance — Schema Supabase
+-- Troco — Schema Supabase
 -- Execute este script no SQL Editor do Supabase (Projeto > SQL Editor)
 -- ============================================================
 
